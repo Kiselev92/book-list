@@ -2,24 +2,17 @@ package kiselev.anton.booklist.model;
 
 import lombok.*;
 
-@With
-@Data
-@Value
-@Builder(toBuilder = true)
-@RequiredArgsConstructor
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Book {
-
-    Long id;
-
-    String vendorCode;
-
-    String title;
-
-    int year;
-
-    String brand;
-
-    int stock;
-
-    int price;
+    private Long id;
+    private String vendorcode;
+    private String title;
+    private int year;
+    private String brand;
+    private int stock;
+    private int price;
 }

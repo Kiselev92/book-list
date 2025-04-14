@@ -14,3 +14,13 @@ services:
     volumes:
       - ~/pgdata:/var/lib/postgresql/data/pgdata
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  tomcat:
+    image: tomcat:9.0
+    container_name: book_list_tomcat
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./target/your-app-name.war:/usr/local/tomcat/webapps/ROOT.war
+    depends_on:
+      - postgres

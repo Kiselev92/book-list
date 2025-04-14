@@ -1,11 +1,15 @@
 package kiselev.anton.booklist.port;
 
-import kiselev.anton.booklist.model.Book;
-import kiselev.anton.booklist.service.BookService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import lombok.RequiredArgsConstructor;
+import java.util.NoSuchElementException;
+import kiselev.anton.booklist.model.Book;
 import org.springframework.web.bind.annotation.*;
+import kiselev.anton.booklist.dao.dto.BookFilter;
+import org.springframework.stereotype.Controller;
+import kiselev.anton.booklist.service.BookService;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.annotation.Validated;
 
 @Controller
 @RequiredArgsConstructor
@@ -14,38 +18,69 @@ public class BookController {
 
     private final BookService bookService;
 
-    @PostMapping
-    public String create(@ModelAttribute Book book) {
+    @GetMapping("/list")
+    public String getAllBooks(Model model) {
+        model.addAttribute("books", bookService.findAll());
+        return "/list";
+    }
+
+    @GetMapping("/new")
+    public String newBook(@ModelAttribute("book") Book book) {
+        return "/new";
+    }
+
+    @PostMapping()
+    public String create(@ModelAttribute("book") @Validated Book book, BindingResult bindingResult){
+        if (bindingResult.hasErrors()) {
+            return "/new";
+        }
         bookService.create(book);
         return "redirect:/book/list";
     }
 
     @GetMapping("/{id}")
-    public String findById(@PathVariable Long id, Model model) {
+    public String findById(@PathVariable("id") Long id, Model model) {
+        try {
+            Book book = bookService.findById(id);
+            model.addAttribute("book", book);
+        } catch (NoSuchElementException e) {
+            model.addAttribute("book", null);
+        }
+        return "findById";
+    }
+
+    @GetMapping("/{id}/edit")
+    public String edit(@PathVariable("id") Long id, Model model) {
         model.addAttribute("book", bookService.findById(id));
-        return "book/details";  // Шаблон src/main/webapp/WEB-INF/views/book/details.html
+        return "/edit";
     }
 
-    @PutMapping
-    public void update(@RequestBody Book book) { bookService.update(book); }
+    @PostMapping("/{id}")
+    public String updateBook(@ModelAttribute("book") Book book,
+                             @PathVariable("id") Long id,
+                             BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return "/edit";
+        }
+        bookService.update(id, book);
+        return "redirect:/book/list";
+    }
 
-    @DeleteMapping("/{id}")
-    public void delete(@PathVariable("id") Long id) {
+   @PostMapping("/{id}/delete")
+    public String deleteBook(@PathVariable("id") Long id) {
         bookService.deleteById(id);
+        return "redirect:/book/list";
     }
 
- /*   private static BookRequest toModel(BookRequest request) {
-        return BookRequest.builder()
-                .id(request.getId())
-                .vendorCode(request.getVendorCode())
-                .title(request.getTitle())
-                .year(request.getYear())
-                .brand(request.getBrand())
-                .stock(request.getStock())
-                .price(request.getPrice())
-                .build();
-    }*/
+    @GetMapping("/filter")
+    public String filterBooks(BookFilter filter, Model model) {
+        model.addAttribute("books", bookService.findFiltered(filter));
+        return "/list";
+    }
+
 }
+
+
 
 
 

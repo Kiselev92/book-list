@@ -1,10 +1,11 @@
 package kiselev.anton.booklist.dao;
 
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import java.util.NoSuchElementException;
 import kiselev.anton.booklist.model.Book;
+import kiselev.anton.booklist.dao.dto.BookFilter;
 import org.springframework.stereotype.Repository;
-import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
@@ -15,46 +16,47 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 public class BookDao {
 
     private final NamedParameterJdbcOperations jdbc;
-    // private final RowMapper<Book> bookRowMapper = new BookRowMapper();
 
     public Long create(Book book) {
         String sql = """
-                INSERT INTO books_list (id, vendorCode, title, year, brand, stock, price)
-                VALUES (:vendorCode, :title, :year, :brand, :stock, :price)
-                """;
+            INSERT INTO books_list (vendorcode, title, year, brand, stock, price)
+            VALUES (:vendorcode, :title, :year, :brand, :stock, :price)
+            RETURNING id""";
 
         SqlParameterSource params = new MapSqlParameterSource()
-                .addValue("vendorCode", book.getVendorCode())
+                .addValue("vendorcode", book.getVendorcode())
                 .addValue("title", book.getTitle())
                 .addValue("year", book.getYear())
                 .addValue("brand", book.getBrand())
                 .addValue("stock", book.getStock())
                 .addValue("price", book.getPrice());
 
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-        jdbc.update(sql, params, keyHolder);
-        return (Long) keyHolder.getKeys().get("id");
+
+        return jdbc.queryForObject(sql, params, (rs, rowNum) -> rs.getLong("id"));
     }
 
     public Book findById(Long id) {
         String sql = """
-                SELECT *
-                FROM books_list
-                WHERE id = :id""";
+            SELECT *
+            FROM books_list
+            WHERE id = :id""";
 
         SqlParameterSource params = new MapSqlParameterSource().addValue("id", id);
 
         return jdbc.query(sql, params, rs -> {
-            rs.next();
-            return new Book(
-                    rs.getLong("id"),
-                    rs.getString("vendorCode"),
-                    rs.getString("title"),
-                    rs.getInt("year"),
-                    rs.getString("brand"),
-                    rs.getInt("stock"),
-                    rs.getInt("price")
-            );
+            if (!rs.next()) {
+                throw new NoSuchElementException("Book not found with id: " + id);
+            }
+
+            return Book.builder()
+                    .id(rs.getLong("id"))
+                    .vendorcode(rs.getString("vendorcode"))
+                    .title(rs.getString("title"))
+                    .year(rs.getInt("year"))
+                    .brand(rs.getString("brand"))
+                    .stock(rs.getInt("stock"))
+                    .price(rs.getInt("price"))
+                    .build();
         });
     }
 
@@ -69,13 +71,14 @@ public class BookDao {
 
     }
 
-    public void update(Long id, Book book) {
+    public void update(Book book) {
         String sql = """
                 UPDATE books_list 
-                SET id = :id, vendorCode = :vendorCode, title = :title, year = :year, brand = :brand, stock = :stock, price = :price
+                SET vendorcode = :vendorcode, title = :title, year = :year, brand = :brand, stock = :stock, price = :price
                 WHERE id = :id""";
-        SqlParameterSource params = new MapSqlParameterSource("id", id)
-                .addValue("vendorCode", book.getVendorCode())
+        SqlParameterSource params = new MapSqlParameterSource()
+                .addValue("id", book.getId())
+                .addValue("vendorcode", book.getVendorcode())
                 .addValue("title", book.getTitle())
                 .addValue("year", book.getYear())
                 .addValue("brand", book.getBrand())
@@ -83,20 +86,57 @@ public class BookDao {
                 .addValue("price", book.getPrice());
 
         jdbc.update(sql, params);
-
-/*    static class BookRowMapper implements RowMapper<Book> {
-        @Override
-        public Book mapRow(ResultSet rs, int rowNum) throws SQLException {
-            return Book.builder()
-                    .id(rs.getLong("id"))
-                    .vendorCode(rs.getString("vendorCode"))
-                    .title(rs.getString("title"))
-                    .year(rs.getInt("year"))
-                    .brand(rs.getString("brand"))
-                    .stock(rs.getInt("stock"))
-                    .price(rs.getInt("price"))
-                    .build();
-        }
-    }*/
     }
+
+    public List<Book> findAll() {
+        String sql = "SELECT * FROM books_list";
+        return jdbc.query(sql, (rs, rowNum) ->
+                Book.builder()
+                        .id(rs.getLong("id"))
+                        .vendorcode(rs.getString("vendorcode"))
+                        .title(rs.getString("title"))
+                        .year(rs.getInt("year"))
+                        .brand(rs.getString("brand"))
+                        .stock(rs.getInt("stock"))
+                        .price(rs.getInt("price"))
+                        .build()
+        );
+    }
+
+    public List<Book> findFiltered(BookFilter filter) {
+        StringBuilder sql = new StringBuilder("SELECT * FROM books_list WHERE 1=1");
+        MapSqlParameterSource params = new MapSqlParameterSource();
+
+        if (filter.getTitle() != null && !filter.getTitle().isBlank()) {
+            sql.append(" AND LOWER(title) LIKE LOWER(:title)");
+            params.addValue("title", "%" + filter.getTitle() + "%");
+        }
+
+        if (filter.getBrand() != null && !filter.getBrand().isBlank()) {
+            sql.append(" AND LOWER(brand) LIKE LOWER(:brand)");
+            params.addValue("brand", "%" + filter.getBrand() + "%");
+        }
+
+        if (filter.getYear() != null) {
+            sql.append(" AND year = :year");
+            params.addValue("year", filter.getYear());
+        }
+
+        sql.append(" ORDER BY id DESC LIMIT :limit OFFSET :offset");
+        params.addValue("limit", filter.getLimit());
+        params.addValue("offset", filter.getOffset());
+
+        return jdbc.query(sql.toString(), params, (rs, rowNum) ->
+                Book.builder()
+                        .id(rs.getLong("id"))
+                        .vendorcode(rs.getString("vendorcode"))
+                        .title(rs.getString("title"))
+                        .year(rs.getInt("year"))
+                        .brand(rs.getString("brand"))
+                        .stock(rs.getInt("stock"))
+                        .price(rs.getInt("price"))
+                        .build()
+        );
+    }
+
 }
